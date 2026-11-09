@@ -81,8 +81,9 @@ def main():
             abstract += "\n\nTL;DR: " + p["TLDR"].strip()
         abstracts.append(abstract)
 
-    if OUT.exists():
-        shutil.rmtree(OUT)
+    # Clear old abstract shards while keeping the independently refreshed scores.json.
+    if (OUT / "abs").exists():
+        shutil.rmtree(OUT / "abs")
     (OUT / "abs").mkdir(parents=True)
     dump(OUT / "papers.json", rows)
     for k in range(0, len(abstracts), SHARD):

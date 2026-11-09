@@ -14,6 +14,7 @@ const state = {
 };
 
 let META = null;
+let scoreSnapshot = null;
 let P = [];
 let results = [];
 let rendered = 0;
@@ -31,16 +32,40 @@ const isPinned = (i) => META.tags[i].zh.includes("（全部");
 
 async function init() {
   const meta = await fetch("data/meta.json", { cache: "no-cache" }).then((r) => r.json());
-  const rows = await fetch(`data/papers.json?v=${meta.version}`).then((r) => r.json());
+  const [rows, scores] = await Promise.all([
+    fetch(`data/papers.json?v=${meta.version}`).then((r) => r.json()),
+    fetch("data/scores.json", { cache: "no-cache" })
+      .then((r) => r.ok ? r.json() : null)
+      .then((snapshot) => snapshot?.ratings && snapshot.capturedAt && snapshot.source ? snapshot : null)
+      .catch(() => null),
+  ]);
   META = meta;
+  scoreSnapshot = scores;
   META.tagIndex = new Map(META.tags.map((t, i) => [t.id, i]));
-  P = rows.map((r, i) => ({
-    i, id: r[0], num: r[1], title: r[2], kw: r[3], area: r[4], status: r[5], tags: r[6],
-    // Only the Chinese part of tag names is searchable: Latin words in names such as "（全部：RSI / Self-Play）"
-    // would otherwise make English queries match every paper under an umbrella tag.
-    hay: (r[2] + " \u0001 " + r[3] + " \u0001 " +
-      r[6].map((t) => meta.tags[t].zh.replace(/[A-Za-z0-9]+/g, " ")).join(" \u0001 ")).toLowerCase(),
-  }));
+  P = rows.map((r, i) => {
+    const ratings = scores?.ratings[r[0]] ?? [];
+    const average = ratings.length ? ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length : null;
+    return {
+      i, id: r[0], num: r[1], title: r[2], kw: r[3], area: r[4], status: r[5], tags: r[6], ratings, average,
+      // Only the Chinese part of tag names is searchable: Latin words in names such as "（全部：RSI / Self-Play）"
+      // would otherwise make English queries match every paper under an umbrella tag.
+      hay: (r[2] + " \u0001 " + r[3] + " \u0001 " +
+        r[6].map((t) => meta.tags[t].zh.replace(/[A-Za-z0-9]+/g, " ")).join(" \u0001 ")).toLowerCase(),
+    };
+  });
+
+  const scoreInfo = $("#score-info");
+  if (scores) {
+    const scored = P.filter((p) => p.average !== null).length;
+    const date = new Date(scores.capturedAt).toLocaleDateString("zh-CN");
+    scoreInfo.textContent = `OpenReview 公开评分快照（${date}）覆盖 ${fmt(scored)} / ${fmt(P.length)} 篇。 `;
+    const source = $("#score-source");
+    source.href = scores.source;
+    source.hidden = false;
+  } else {
+    scoreInfo.textContent = "评分暂不可用。";
+    $('#sort option[value="score"]').disabled = true;
+  }
 
   const sc = META.statusCounts;
   $("#stats").textContent =
@@ -108,6 +133,8 @@ function sortResults() {
     results.sort((a, b) => a.status - b.status || b.num - a.num);
   } else if (state.sort === "title") {
     results.sort((a, b) => a.title.localeCompare(b.title, "en"));
+  } else if (state.sort === "score") {
+    results.sort((a, b) => (b.average ?? 0) - (a.average ?? 0) || byNum(a, b));
   } else {
     results.sort(byNum);
   }
@@ -222,7 +249,7 @@ function renderActiveFilters() {
 }
 
 function renderOverview() {
-  if (state.tags.size || state.q) { $("#overview").innerHTML = ""; return; }
+  if (state.tags.size || state.q || state.sort === "score") { $("#overview").innerHTML = ""; return; }
   $("#overview").innerHTML = `<a class="trends-banner" href="trends.html"><strong>投稿规律</strong>
     <span>十条规律，以及关键词排行、RL / 智能体子方向、基座模型、投稿时间线等统计图</span><span class="go">查看 →</span></a>` +
   META.groups.map((g, gi) => {
@@ -250,10 +277,13 @@ function card(p, toks) {
   const chips = p.tags.map((t) =>
     `<button class="chip${state.tags.has(t) ? " on" : ""}" data-tag="${t}" style="--hue:${hue(META.tags[t].g)}" title="${esc(META.tags[t].en)}">${highlight(META.tags[t].zh, toks)}</button>`
   ).join("");
+  const score = p.average !== null
+    ? `<span class="score"><strong>OpenReview 均分 ${p.average.toFixed(2)} / 4</strong> · ${p.ratings.length} 份评审 · ${p.ratings.join(" / ")}</span>`
+    : scoreSnapshot ? "<span>快照暂无评分</span>" : "";
   return `<li class="paper" data-i="${p.i}">
     <div class="ptitle"><a href="https://openreview.net/forum?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">${highlight(p.title, toks)}</a>${
       st !== "active" ? `<span class="badge ${st}">${STATUS_LABEL[st]}</span>` : ""}</div>
-    <div class="pmeta"><span>#${p.num}</span><span>${esc(META.areas[p.area])}</span><a href="https://openreview.net/pdf?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">PDF</a></div>
+    <div class="pmeta"><span>#${p.num}</span><span>${esc(META.areas[p.area])}</span><a href="https://openreview.net/pdf?id=${encodeURIComponent(p.id)}" target="_blank" rel="noopener">PDF</a>${score}</div>
     ${p.kw ? `<div class="kw">${highlight(p.kw, toks)}</div>` : ""}
     <div class="chips">${chips || '<span class="muted">（无细分标签）</span>'}</div>
     <details><summary>摘要</summary><div class="abs">加载中…</div></details>
@@ -300,7 +330,8 @@ function readHash() {
   state.area = h.get("a") || "";
   state.status = new Set((h.get("s") || "active").split(",").filter((s) => META.statuses.includes(s)));
   state.mode = h.get("m") === "or" ? "or" : "and";
-  state.sort = h.get("o") || "num";
+  const sort = h.get("o");
+  state.sort = (sort === "score" && !scoreSnapshot ? null : sort) || "num";
   $("#q").value = state.q;
   $("#area").value = state.area;
   $("#mode").value = state.mode;
@@ -309,10 +340,12 @@ function readHash() {
 }
 
 function exportCSV() {
-  const rows = [["number", "title", "status", "primary_area", "tags", "keywords", "url"]];
+  const rows = [["number", "title", "status", "primary_area", "tags", "keywords", "url",
+    "openreview_average", "openreview_review_count", "openreview_ratings"]];
   for (const p of results) {
     rows.push([p.num, p.title, META.statuses[p.status], META.areas[p.area],
-      p.tags.map((t) => META.tags[t].zh).join("; "), p.kw, `https://openreview.net/forum?id=${p.id}`]);
+      p.tags.map((t) => META.tags[t].zh).join("; "), p.kw, `https://openreview.net/forum?id=${p.id}`,
+      p.average?.toFixed(2) ?? "", p.ratings.length || "", p.ratings.join("; ")]);
   }
   const csv = "\ufeff" + rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
   const a = document.createElement("a");

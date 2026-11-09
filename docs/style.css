@@ -96,6 +96,7 @@ main { flex: 1; min-width: 0; }
 .toolbar select, .toolbar button {
   padding: 4px 8px; border: 1px solid var(--line); border-radius: 5px; background: #fff; cursor: pointer;
 }
+.score-info { margin: 0 0 10px; }
 
 #overview { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-bottom: 16px; }
 #overview:empty { display: none; }
@@ -123,6 +124,8 @@ main { flex: 1; min-width: 0; }
 .badge.withdrawn { background: #fff4e5; color: #9a5b00; }
 .badge.desk_rejected { background: #fdecec; color: #a12622; }
 .pmeta { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.score { font-variant-numeric: tabular-nums; }
+.score strong { color: var(--accent); }
 .kw { color: #4b5563; font-size: 12.5px; margin-top: 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .chip {

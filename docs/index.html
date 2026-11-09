@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ICLR 2027 投稿分类浏览</title>
-  <link rel="stylesheet" href="style.css?v=e6e748e607">
+  <link rel="stylesheet" href="style.css?v=a298d045c3">
 </head>
 <body>
   <header class="topbar">
@@ -63,10 +63,12 @@
             <option value="num_desc">投稿编号 ↓</option>
             <option value="title">标题 A→Z</option>
             <option value="rel">搜索相关度</option>
+            <option value="score">OpenReview 均分 ↓</option>
           </select>
         </label>
         <button id="export">导出 CSV</button>
       </div>
+      <p class="score-info muted small"><span id="score-info"></span><a id="score-source" target="_blank" rel="noopener" hidden>快照来源</a></p>
       <section id="overview"></section>
       <ol id="list"></ol>
       <div id="sentinel" class="muted"></div>
@@ -79,6 +81,6 @@
     规则见 <a href="https://github.com/yzc-666/iclr2027-explorer/blob/HEAD/scripts/taxonomy.py" target="_blank" rel="noopener">scripts/taxonomy.py</a>。
   </footer>
 
-  <script src="app.js?v=9d5d722508"></script>
+  <script src="app.js?v=dbd74223a1"></script>
 </body>
 </html>
